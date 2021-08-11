@@ -1,0 +1,30 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "description": "IP list schema",
+    "additionalProperties": false,
+    "properties": {
+      "lists": {
+        "type": "array",
+        "uniqueItems": true,
+        "description": "IP lists",
+        "items": {
+          "type": "object",
+          "required": [
+            "id",
+            "path"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+  
