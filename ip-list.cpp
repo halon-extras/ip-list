@@ -8,7 +8,7 @@
 #include <syslog.h>
 
 void list_open(const std::string& id, const std::string& path);
-bool list_lookup(const std::string& id, const std::string& address);
+bool list_lookup(const std::string& id, const std::string& address, std::string& tag);
 void list_reload(const std::string& id);
 
 HALON_EXPORT
@@ -83,8 +83,12 @@ void ip_list_lookup(HalonHSLContext* hhc, HalonHSLArguments* args, HalonHSLValue
 		return;
 
 	try {
-		bool t = list_lookup(id, address);
-		HalonMTA_hsl_value_set(ret, HALONMTA_HSL_TYPE_BOOLEAN, &t, 0);
+		std::string tag;
+		bool t = list_lookup(id, address, tag);
+		if (!t || tag.empty())
+			HalonMTA_hsl_value_set(ret, HALONMTA_HSL_TYPE_BOOLEAN, &t, 0);
+		else
+			HalonMTA_hsl_value_set(ret, HALONMTA_HSL_TYPE_STRING, tag.c_str(), 0);
 	} catch (const std::runtime_error& e) {
 		syslog(LOG_CRIT, "%s", e.what());
 	}
@@ -122,15 +126,25 @@ lpm_t* lpm_load(const std::string& id, const std::string& path)
 	{
 		if (address[0] == '#') continue;
 		auto ws = address.find_first_of(" \t\r\n");
+
+		char* tag = nullptr;
 		if (ws != std::string::npos)
+		{
+			auto ts = address.find_first_not_of(" \t\r\n", ws);
+			auto te = address.find_last_not_of(" \t\r\n");
+			if (ts != std::string::npos)
+				tag = strdup(address.substr(ts, te - ts + 1).c_str());
 			address = address.substr(0, ws);
+		}
+		if (!tag)
+			tag = strdup("");
 
 		if (lpm_strtobin(address.c_str(), &addr, &len, &preflen) != 0)
 		{
 			syslog(LOG_INFO, "ip-list %s:%zu: bad address/network format: %s", path.c_str(), cline, address.c_str());
 			continue;
 		}
-		if (lpm_insert(lpm, addr, len, preflen, lpm) != 0)
+		if (lpm_insert(lpm, addr, len, preflen, tag) != 0)
 		{
 			syslog(LOG_INFO, "ip-list %s:%zu: failed to insert %s", path.c_str(), cline, address.c_str());
 			continue;
@@ -154,7 +168,7 @@ void list_open(const std::string& id, const std::string& path)
 	l.lpm = lpm;
 }
 
-bool list_lookup(const std::string& id, const std::string& address)
+bool list_lookup(const std::string& id, const std::string& address, std::string& tag)
 {
 	auto l = lists.find(id);
 	if (l == lists.end())
@@ -169,7 +183,15 @@ bool list_lookup(const std::string& id, const std::string& address)
 
 	std::shared_lock lock(l->second.lock);
 
-	return lpm_lookup(l->second.lpm, addr, len) != 0;
+	char* t = (char*)lpm_lookup(l->second.lpm, addr, len);
+	if (t)
+		tag = std::string(t);
+	return t != nullptr;
+}
+
+void lpm_dtor(void *arg, const void *key, size_t len, void *val)
+{
+	free(val);
 }
 
 void list_reload(const std::string& id)
@@ -181,6 +203,7 @@ void list_reload(const std::string& id)
 	auto lpm = lpm_load(id, l->second.path);
 
 	std::unique_lock lock(l->second.lock);
+	lpm_clear(l->second.lpm, lpm_dtor, nullptr);
 	lpm_destroy(l->second.lpm);
 	l->second.lpm = lpm;
 }
