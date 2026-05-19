@@ -124,7 +124,7 @@ lpm_t* lpm_load(const std::string& id, const std::string& path)
 	size_t cline = 1, loaded = 0;
 	for(std::string address; getline(input, address); ++cline)
 	{
-		if (address[0] == '#') continue;
+		if (address.empty() || address[0] == '#') continue;
 		auto ws = address.find_first_of(" \t\r\n");
 
 		char* tag = nullptr;
