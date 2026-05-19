@@ -142,11 +142,13 @@ lpm_t* lpm_load(const std::string& id, const std::string& path)
 		if (lpm_strtobin(address.c_str(), &addr, &len, &preflen) != 0)
 		{
 			syslog(LOG_INFO, "ip-list %s:%zu: bad address/network format: %s", path.c_str(), cline, address.c_str());
+			free(tag);
 			continue;
 		}
 		if (lpm_insert(lpm, addr, len, preflen, tag) != 0)
 		{
 			syslog(LOG_INFO, "ip-list %s:%zu: failed to insert %s", path.c_str(), cline, address.c_str());
+			free(tag);
 			continue;
 		}
 		++loaded;
